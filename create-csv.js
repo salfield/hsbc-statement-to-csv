@@ -1,42 +1,36 @@
-var csv = '';
-var nl = '\n';
-var $table = $('table:not(".extPibTable")');
-var statement_date = $("span[data-dojo-attach-point='statementDate']").html();
-var year = statement_date.split(" ")[2];
-var months = "JanFebMarAprMayJunJulAugSepOctNovDec";
-var month = months.indexOf(statement_date.split(" ")[1]) / 3 + 1;
-var day = statement_date.split(" ")[0];
-var file_name = 'HSBC current - month ending ' + year + '.' + month + '.' + day;
+function readDate(dmy, seperator = '/') {  // example HSBC date: 15 Jan 08
+    const months = "JanFebMarAprMayJunJulAugSepOctNovDec".match(/.{1,3}/g)  // Split every 3rd character
+    const [day, month, year] = dmy.split(' ')
+    return [2000 + Number(year), 1 + months.indexOf(month), day].join(seperator)
+}
 
-var tmp = '';
-
-// get rest of data
-var done = false;
-// loop rows
-$('tbody tr:not(".dijitReset")', $table).slice(1, $table.length).each(function(){
-    tmp = this;
-    if (done) { return; }
-    var date = $($('td', tmp)[0]).text().split("Date")[1];
-    var segs = date.split(' ');
-    var day = segs[0];
-    var month = months.indexOf(segs[1]) / 3 + 1;
-    var year = segs[2];
-    var amo = $($('td', tmp)[2]).text().split("Amount")[1];
-    console.log(tmp)
-    if (amo) {
-	csv = csv + day + '/' + month + '/20' + year + ',';
-
-	csv = csv + amo.replace(/,/g, '') + ',';
-
-	var desc = $($('td', tmp)[1]).text().split("Description")[1];
-	csv = csv + desc.replace(/[,'"]/g, '');
-	csv = csv + nl;
+function readStatementLine(element) {
+    const [date, description, amount] = Array.from(element.cells).map(function (e) { return e.textContent })
+    return {
+        date: readDate(date.replace(/^Date/, '')),
+        description: description.replace(/^Description/, '').replace(/[,'"]/g, ''),
+        amount: amount.replace(/^Amount/, '').replace(',', '')
     }
-    if (desc == "Closing balance this month") {
-	done = true;
-    }
-});
+}
 
-var data = 'data:application/csv;charset=utf-8,' + encodeURIComponent(csv);
-$('body').append('<a href="'+data+'" download="'+file_name+'.csv" id="download-statement" style="display: none;">Download</a>');
-$('#download-statement')[0].click();
+function generateCSV() {
+    const statementDateElement = document.querySelector("span[data-dojo-attach-point='statementDate']").textContent
+    const fileName = `HSBC current - month ending ${readDate(statementDateElement, '.')}`
+
+    var tableElement = document.querySelectorAll('table:not(.extPibTable) tbody tr:not(.dijitReset)')
+
+    const csv = Array.from(tableElement)
+        .map(readStatementLine)
+        .filter(statementLine => statementLine.amount)
+        .filter(statementLine => "Closing balance this month" != statementLine.description)
+        .map(statementLine => `${statementLine.date},${statementLine.description},${statementLine.amount}`)
+        .join('\n')
+    const data = `data:application/csv;charset=utf-8,${encodeURIComponent(csv)}`
+
+    document.body.insertAdjacentHTML('afterend', `<a href="${data}" download="${fileName}.csv" id="download-statement" style="display: none;">Download</a>`)
+    const download_link = document.getElementById('download-statement')
+    download_link.click();
+    download_link.remove();
+}
+
+generateCSV()
